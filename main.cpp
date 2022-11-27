@@ -2,6 +2,8 @@
 //	Description: Entry point for the final project
 //	Last Modified: 2022-12-06
 //	Notes:
+// 	Resources for the snow animation:
+// 	https://users.soe.ucsc.edu/~pang/161/w09/submit/projects/mang/finalproject.html
 
 
 #include <stdio.h>
@@ -29,7 +31,7 @@
 #define RAIN	0
 #define SNOW	1
 #define	HAIL	2
-
+#define PI 		3.1415926535897932384626433832795
 
 float slowdown = 2.0;
 float velocity = 0.0;
@@ -242,7 +244,9 @@ void			HsvRgb( float[3], float [3] );
 void			Cross(float[3], float[3], float[3]);
 float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
-void 	DrawSnowman();
+void 			DrawSnowman(int );
+void			InitLighting();
+void			DrawDog();
 
 
 // Paticle System
@@ -441,13 +445,57 @@ Animate( )
 	glutPostRedisplay( );
 }
 
+// Lighting initialization for ambient, diffuse, specular, and position
+void InitLighting( ) {
+	GLfloat ambient[] = { 0.2, 0.2, 0.2, 1.0 };
+	GLfloat diffuse[] = { 1.0, 1.0, 1.0, 1.0 };
+	GLfloat specular[] = { 1.0, 1.0, 1.0, 1.0 };
+	GLfloat position[] = { 0.0, 3.0, 3.0, 0.0 };
+	glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
+	glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
+	glLightfv(GL_LIGHT0, GL_POSITION, position);
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+	glEnable(GL_AUTO_NORMAL);
+	glEnable(GL_NORMALIZE);
+}
+
+void DrawDog( ) {
+	glPushMatrix();
+		glTranslatef(0.0, 0.0, 0.0);
+		glScalef(0.5, 0.5, 0.5);
+		glRotatef(90.0, 0.0, 1.0, 0.0);
+		glCallList(Dog);
+	glPopMatrix();
+}
+
+
 
 // Draw the snowman using DrawSnowman()
 
-void DrawSnowman(){
+void DrawSnowman(int gender){
 	// Draw a snow man using glutSolidSphere( ): 
 	// Draw the body of the snowman using glutSolidSphere( ):
 	// This will be moved to a function called DrawSnowman( )
+
+	// Color of hat for male
+	float hatR;
+	float hatG;
+	float hatB;
+	if (gender == 1){
+		// blue hat
+
+		hatR = 0.0;
+		hatG = 0.1;
+		hatB = 0.8;
+	}else{
+		// pink hat
+		hatR = 0.8;
+		hatG = 0.1;
+		hatB = 0.8;
+	}
+	// Draw the body of the snowman using glutSolidSphere( ):
 	glColor3f( 1.f, 1.f, 1.f );
 	glPushMatrix( );
 		glTranslatef( 0.f, 0.75f, 0.f );
@@ -525,7 +573,7 @@ void DrawSnowman(){
 	// use a red color for the hat
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		// the hat is on the head of the snowman
 		glTranslatef( 0.f, 2.75f, 0.f );
 		// rotate the hat so that it points down
@@ -541,7 +589,7 @@ void DrawSnowman(){
 	// use a red color for the brim
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		glTranslatef( 0.f, 2.75f, 0.f );
 		// rotate the brim so that it points up
 		glRotatef( 90.f, 1.f, 0.f, 0.f );
@@ -556,7 +604,7 @@ void DrawSnowman(){
 	// use a red color for the top
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		glTranslatef( 0.f, 3.25f, 0.f );
 		// rotate the top so that it points up
 		glRotatef( 90.f, 1.f, 0.f, 0.f );
@@ -724,12 +772,30 @@ void Display( ){
 	// use a white color for the particles
 
 	glColor3f( 1.f, 1.f, 1.f );
+	InitLighting( );
 
 	// draw the particles falling from the sky
 	// initialize the particles position		
 	drawScene();
 	// Draw the snowman:
-	DrawSnowman( );
+	glPushMatrix();
+		glTranslatef(3*cos(2*PI*Time), 0.f, 4*sin(2*PI*Time));
+		glRotatef(360*Time, 0.f, 1.f, 0.f);
+		DrawSnowman(1);
+	
+	glPopMatrix();
+	glPushMatrix();
+		glTranslatef(-3*cos(2*PI*Time), 0.f, 4*sin(2*PI*Time));
+		glRotatef(-360*Time, 0.f, 1.f, 0.f);
+		DrawSnowman(0);
+	glPopMatrix();
+
+	// Draw a dog 
+	glPushMatrix();
+		glTranslatef(0.f, 0.f, 0.f);
+		glRotatef(360*Time, 0.f, 1.f, 0.f);
+		DrawDog(0);
+	glPopMatrix();
 
 
 #ifdef DEMO_Z_FIGHTING
@@ -1093,6 +1159,14 @@ void InitLists( ){
 	glutSetWindow( MainWindow );
 
 	// create the object(s):
+	DogList = glGenLists( 1 );
+	glNewList( DogList, GL_COMPILE );
+		// Make the dog with an obj file
+	
+
+
+	glEndList( );
+
 
 	// create the axes:
 
