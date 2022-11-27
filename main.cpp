@@ -23,10 +23,52 @@
 
 #define MS_PER_CYCLE	10000
 
+#define MAX_PARTICLES 1000
+#define WCX		640
+#define WCY		480
+#define RAIN	0
+#define SNOW	1
+#define	HAIL	2
 
+
+float slowdown = 2.0;
+float velocity = 0.0;
+float zoom = 20.0;
+float pan = 0.0;
+float tilt = 0.0;
+
+int loop;
+int fall;
+
+//floor colors
+float r = 0.0;
+float g = 1.0;
+float b = 0.0;
+float ground_points[21][21][3];
+float ground_colors[21][21][4];
+float accum = -10.0;
+
+typedef struct {
+	// Life
+	bool alive;	// is the particle alive?
+	float life;	// particle lifespan
+	float fade; // decay
+	// color
+	float red; 
+	float green;
+	float blue;
+	// Position/direction
+	float xpos; 
+	float ypos; 
+	float zpos;
+	// Velocity/Direction, only goes down in y dir
+	float vel;
+	// Gravity
+	float gravity;
+}particles;
 // title of these windows:
 
-const char *WINDOWTITLE = "OpenGL / GLUT Sample -- Joe Graphics";
+const char *WINDOWTITLE = "OpenGL Final Project - Mateo Estrada Jorge";
 const char *GLUITITLE   = "User Interface Window";
 
 // what the glui package defines as true and false:
@@ -136,29 +178,6 @@ const GLfloat Colors[ ][3] =
 	{ 0., 0., 0. },		// black
 };
 
-// array of particles
-const int NUM_PARTICLES = 100;
-struct Particle
-{
-	float x;
-	float y;
-	float z;
-	float vx;
-	float vy;
-	float vz;
-	float r;
-	float g;
-	float b;
-	float life;
-	float decay;
-	float size;
-	float weight;
-	float fade;
-	float az;
-	float ay;
-	float ax;
-};
-
 // fog parameters:
 
 const GLfloat FOGCOLOR[4] = { .0f, .0f, .0f, 1.f };
@@ -223,8 +242,145 @@ void			HsvRgb( float[3], float [3] );
 void			Cross(float[3], float[3], float[3]);
 float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
+void 	DrawSnowman();
 
 
+// Paticle System
+particles par_sys[MAX_PARTICLES]; 
+
+
+// Initialize/Reset Particles - give them their attributes
+void initParticles(int i) {
+		par_sys[i].alive = true;
+		par_sys[i].life = 1.0;
+		par_sys[i].fade = float(rand()%100)/1000.0f+0.003f;
+		
+		par_sys[i].xpos = (float) (rand() % 21) - 10;
+		par_sys[i].ypos = 10.0;
+		par_sys[i].zpos = (float) (rand() % 21) - 10;
+		
+		par_sys[i].red = 0.5;
+		par_sys[i].green = 0.5;
+		par_sys[i].blue = 1.0;
+		
+		par_sys[i].vel = velocity;
+		par_sys[i].gravity = -0.8;//-0.8;
+
+}
+
+void init( ) {
+	int x, z;
+
+    glShadeModel(GL_SMOOTH);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClearDepth(1.0);
+    glEnable(GL_DEPTH_TEST);
+
+	// Ground Verticies
+    // Ground Colors
+    for (z = 0; z < 21; z++) {
+    	for (x = 0; x < 21; x++) {
+    		ground_points[x][z][0] = x - 10.0;
+    		ground_points[x][z][1] = accum;
+    		ground_points[x][z][2] = z - 10.0;
+    	
+    		ground_colors[z][x][0] = r; // red value
+    		ground_colors[z][x][1] = g; // green value
+    		ground_colors[z][x][2] = b; // blue value
+    		ground_colors[z][x][3] = 0.0; // acummulation factor
+    	}
+    }  
+    
+    // Initialize particles
+    for (loop = 0; loop < MAX_PARTICLES; loop++) {
+        initParticles(loop);
+    }
+}
+
+// For Snow
+void drawSnow() {
+	float x, y, z;
+	for (loop = 0; loop < MAX_PARTICLES; loop=loop+2) {
+		if (par_sys[loop].alive == true) {			
+			x = par_sys[loop].xpos;
+			y = par_sys[loop].ypos + zoom;
+			z = par_sys[loop].zpos ;
+			
+			// Draw particles
+			glColor3f(1.0, 1.0, 1.0);
+			glPushMatrix();
+			glTranslatef(x, y, z);
+			glutSolidSphere(0.2, 16, 16);
+			glPopMatrix();
+			
+			// Update values
+			//Move
+			par_sys[loop].ypos += par_sys[loop].vel / (slowdown*1000);
+			par_sys[loop].vel += par_sys[loop].gravity;
+			// Decay
+			par_sys[loop].life -= par_sys[loop].fade;
+
+			if (par_sys[loop].ypos <= -10) {
+				int zi = z + 10;
+				int xi = x + 10;
+				ground_colors[zi][xi][0] = 1.0;
+				ground_colors[zi][xi][2] = 1.0;
+				ground_colors[zi][xi][3] += 1.0;
+				if (ground_colors[zi][xi][3] > 1.0) {
+					ground_points[xi][zi][1] += 0.1;
+				}
+				par_sys[loop].life = -1.0;
+			}
+
+			//Revive 
+			if (par_sys[loop].life < 0.0) {
+				initParticles(loop);
+			}
+		}
+	}
+}
+
+// Draw Particles
+void drawScene( ) {
+	int i, j;
+	glPushMatrix();
+		glRotatef(pan, 0.0, 1.0, 0.0);
+		glRotatef(tilt, 1.0, 0.0, 0.0);
+		// GROUND
+		// move to the center of the scene
+		glTranslatef(0.0, -10.0, 0.0);
+		glColor3f(r, g, b);
+		glBegin(GL_QUADS);
+			// along z - y const
+			for (i = -10; i+1 < 11; i++) {
+				// along x - y const
+				for (j = -10; j+1 < 11; j++) {
+					glColor3fv(ground_colors[i+10][j+10]);
+					glVertex3f(ground_points[j+10][i+10][0], 
+								ground_points[j+10][i+10][1]  + zoom, 
+								ground_points[j+10][i+10][2]);
+					glColor3fv(ground_colors[i+10][j+1+10]);
+					glVertex3f(ground_points[j+1+10][i+10][0], 
+								ground_points[j+1+10][i+10][1]  + zoom,
+								ground_points[j+1+10][i+10][2]);
+					glColor3fv(ground_colors[i+1+10][j+1+10]);
+					glVertex3f(ground_points[j+1+10][i+1+10][0],
+								ground_points[j+1+10][i+1+10][1]  + zoom,
+								ground_points[j+1+10][i+1+10][2]);
+					glColor3fv(ground_colors[i+1+10][j+10]);
+					glVertex3f(ground_points[j+10][i+1+10][0],
+								ground_points[j+10][i+1+10][1] + zoom,
+								ground_points[j+10][i+1+10][2]);			
+				}
+			
+			}
+		glEnd();
+		// Which Particles
+		drawSnow();
+
+	glPopMatrix();
+}
+						 
 // Main program:
 int
 main( int argc, char *argv[ ] )
@@ -243,6 +399,7 @@ main( int argc, char *argv[ ] )
 
 	InitLists( );
 
+	init();
 	// init all the global variables used by Display( ):
 	// this will also post a redisplay
 
@@ -289,18 +446,6 @@ Animate( )
 
 void DrawSnowman(){
 	// Draw a snow man using glutSolidSphere( ): 
-	
-	// Draw the ground:
-	// This will be moved to a function called DrawGround( )
-	glColor3f( 0.3f, 0.3f, 0.3f );
-	glBegin( GL_QUADS );
-		glNormal3f( 0.f, 1.f, 0.f );
-		glVertex3f( -10.f, 0.f, -10.f );
-		glVertex3f( -10.f, 0.f,  10.f );
-		glVertex3f(  10.f, 0.f,  10.f );
-		glVertex3f(  10.f, 0.f, -10.f );
-	glEnd( );
-
 	// Draw the body of the snowman using glutSolidSphere( ):
 	// This will be moved to a function called DrawSnowman( )
 	glColor3f( 1.f, 1.f, 1.f );
@@ -581,47 +726,8 @@ void Display( ){
 	glColor3f( 1.f, 1.f, 1.f );
 
 	// draw the particles falling from the sky
-	// initialize the particles position
-
-	struct Particle particles [NUM_PARTICLES];
-	for (int i = 0; i < NUM_PARTICLES; i++)
-	{
-		particles[i].x = 0.f;
-		particles[i].y = 0.f;
-		particles[i].z = 0.f;
-		particles[i].r = 0.05f;
-		particles[i].vx = 0.f;
-		particles[i].vy = 0.f;
-		particles[i].vz = 0.f;
-		particles[i].ax = 0.f;
-		particles[i].ay = 0.f;
-		particles[i].az = 0.f;
-		particles[i].life = 0.f;
-		particles[i].fade = 0.f;
-	}
-
-	for( int i = 0; i < 100; i++ )
-	{
-		glPushMatrix( );
-			glTranslatef( particles[ i ].x, particles[ i ].y, particles[ i ].z );
-			glutSolidSphere( 0.05f, 10, 10 );
-		glPopMatrix( );
-	}
-
-	// animate the particles falling from the sky
-
-	for( int i = 0; i < 100; i++ )
-	{
-		particles[ i ].x += particles[ i ].vx;
-		particles[ i ].y += particles[ i ].vy;
-		particles[ i ].z += particles[ i ].vz;
-		particles[ i ].vx += particles[ i ].ax;
-		particles[ i ].vy += particles[ i ].ay;
-		particles[ i ].vz += particles[ i ].az;
-		particles[ i ].life -= particles[ i ].fade;
-	}
-
-
+	// initialize the particles position		
+	drawScene();
 	// Draw the snowman:
 	DrawSnowman( );
 
@@ -1031,7 +1137,11 @@ Keyboard( unsigned char c, int x, int y )
 		case ESCAPE:
 			DoMainMenu( QUIT );	// will not return here
 			break;				// happy compiler
-
+		case 's':
+		case 'S':
+			fall = SNOW;
+			break;
+	
 		default:
 			fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
 	}
