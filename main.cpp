@@ -22,6 +22,9 @@
 #include "glut.h"
 
 
+#define MS_PER_CYCLE	10000
+
+
 // title of these windows:
 
 const char *WINDOWTITLE = "OpenGL / GLUT Sample -- Joe Graphics";
@@ -41,8 +44,6 @@ const int ESCAPE = 0x1b;
 const int INIT_WINDOW_SIZE = 600;
 
 // size of the 3d box to be drawn:
-
-const float BOXSIZE = 2.f;
 
 // multiplication factors for input interaction:
 //  (these are known from previous experience)
@@ -144,17 +145,7 @@ const GLfloat FOGDENSITY  = 0.30f;
 const GLfloat FOGSTART    = 1.5f;
 const GLfloat FOGEND      = 4.f;
 
-
-// what options should we compile-in?
-// in general, you don't need to worry about these
-// i compile these in to show class examples of things going wrong
-
-//#define DEMO_Z_FIGHTING
-//#define DEMO_DEPTH_BUFFER
-
-
 // non-constant global variables:
-
 int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
 int		AxesOn;					// != 0 means to draw the axes
@@ -170,10 +161,12 @@ int		WhichColor;				// index into Colors[ ]
 int		WhichProjection;		// ORTHO or PERSP
 int		Xmouse, Ymouse;			// mouse values
 float	Xrot, Yrot;				// rotation angles in degrees
+float   Time;				   // time in seconds
 
+// Project specific variables
+bool    Freeze;                 // freeze animation
 
-// function prototypes:
-
+// Function prototypes:
 void	Animate( );
 void	Display( );
 void	DoAxesMenu( int );
@@ -210,8 +203,7 @@ float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
 
 
-// main program:
-
+// Main program:
 int
 main( int argc, char *argv[ ] )
 {
@@ -251,11 +243,9 @@ main( int argc, char *argv[ ] )
 }
 
 
-// this is where one would put code that is to be called
-// everytime the glut main loop has nothing to do
-//
+// This is where one would put code that is to be called
+// every time the glut main loop has nothing to do
 // this is typically where animation parameters are set
-//
 // do not call Display( ) from here -- let glutPostRedisplay( ) do it
 
 void
@@ -263,19 +253,19 @@ Animate( )
 {
 	// put animation stuff in here -- change some global variables
 	// for Display( ) to find:
-
 	// force a call to Display( ) next time it is convenient:
-
+	// add global Time to keep track of time
+	int ms = glutGet( GLUT_ELAPSED_TIME );
+	ms %= MS_PER_CYCLE;
+	Time = (float)ms / (float)MS_PER_CYCLE;	
 	glutSetWindow( MainWindow );
 	glutPostRedisplay( );
 }
 
 
-// draw the complete scene:
+// Draw the complete scene:
 
-void
-Display( )
-{
+void Display( ){
 	// set which window we want to do the graphics into:
 
 	glutSetWindow( MainWindow );
@@ -377,7 +367,6 @@ Display( )
 
 
 	// draw the box object by calling up its display list:
-
 	glCallList( BoxList );
 
 #ifdef DEMO_Z_FIGHTING
@@ -645,11 +634,10 @@ InitMenus( )
 // initialize the glut and OpenGL libraries:
 //	also setup callback functions
 
-void
-InitGraphics( )
-{
-	// request the display modes:
-	// ask for red-green-blue-alpha color, double-buffering, and z-buffering:
+void InitGraphics( ){
+	// request the display modes
+	// ask for red-green-blue-alpha color
+	// double-buffering, and z-buffering
 
 	glutInitDisplayMode( GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH );
 
@@ -737,67 +725,11 @@ InitGraphics( )
 //  memory so that they can be played back efficiently at a later time
 //  with a call to glCallList( )
 
-void
-InitLists( )
-{
-	float dx = BOXSIZE / 2.f;
-	float dy = BOXSIZE / 2.f;
-	float dz = BOXSIZE / 2.f;
+void InitLists( ){
+	
 	glutSetWindow( MainWindow );
 
-	// create the object:
-
-	BoxList = glGenLists( 1 );
-	glNewList( BoxList, GL_COMPILE );
-
-		glBegin( GL_QUADS );
-
-			glColor3f( 1., 0., 0. );
-
-				glNormal3f( 1., 0., 0. );
-					glVertex3f(  dx, -dy,  dz );
-					glVertex3f(  dx, -dy, -dz );
-					glVertex3f(  dx,  dy, -dz );
-					glVertex3f(  dx,  dy,  dz );
-
-				glNormal3f(-1., 0., 0.);
-					glVertex3f( -dx, -dy,  dz);
-					glVertex3f( -dx,  dy,  dz );
-					glVertex3f( -dx,  dy, -dz );
-					glVertex3f( -dx, -dy, -dz );
-
-			glColor3f( 0., 1., 0. );
-
-				glNormal3f(0., 1., 0.);
-					glVertex3f( -dx,  dy,  dz );
-					glVertex3f(  dx,  dy,  dz );
-					glVertex3f(  dx,  dy, -dz );
-					glVertex3f( -dx,  dy, -dz );
-
-				glNormal3f(0., -1., 0.);
-					glVertex3f( -dx, -dy,  dz);
-					glVertex3f( -dx, -dy, -dz );
-					glVertex3f(  dx, -dy, -dz );
-					glVertex3f(  dx, -dy,  dz );
-
-			glColor3f(0., 0., 1.);
-
-				glNormal3f(0., 0., 1.);
-					glVertex3f(-dx, -dy, dz);
-					glVertex3f( dx, -dy, dz);
-					glVertex3f( dx,  dy, dz);
-					glVertex3f(-dx,  dy, dz);
-
-				glNormal3f(0., 0., -1.);
-					glVertex3f(-dx, -dy, -dz);
-					glVertex3f(-dx,  dy, -dz);
-					glVertex3f( dx,  dy, -dz);
-					glVertex3f( dx, -dy, -dz);
-
-		glEnd( );
-
-	glEndList( );
-
+	// create the object(s):
 
 	// create the axes:
 
@@ -818,8 +750,15 @@ Keyboard( unsigned char c, int x, int y )
 	if( DebugOn != 0 )
 		fprintf( stderr, "Keyboard: '%c' (0x%0x)\n", c, c );
 
-	switch( c )
-	{
+	switch( c ){
+		case 'f':
+		case 'F':
+			Freeze = !Freeze;
+			if( Freeze )
+				glutIdleFunc( NULL );
+			else
+				glutIdleFunc( Animate );
+			break;
 		case 'o':
 		case 'O':
 			WhichProjection = ORTHO;
@@ -959,6 +898,7 @@ Reset( )
 	WhichColor = WHITE;
 	WhichProjection = PERSP;
 	Xrot = Yrot = 0.;
+	Freeze = false;
 }
 
 
