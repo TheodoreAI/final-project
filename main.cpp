@@ -21,7 +21,6 @@
 #include <OpenGl/glu.h>
 #include "glut.h"
 
-
 #define MS_PER_CYCLE	10000
 
 
@@ -135,6 +134,29 @@ const GLfloat Colors[ ][3] =
 	{ 1., 0., 1. },		// magenta
 	{ 1., 1., 1. },		// white
 	{ 0., 0., 0. },		// black
+};
+
+// array of particles
+const int NUM_PARTICLES = 100;
+struct Particle
+{
+	float x;
+	float y;
+	float z;
+	float vx;
+	float vy;
+	float vz;
+	float r;
+	float g;
+	float b;
+	float life;
+	float decay;
+	float size;
+	float weight;
+	float fade;
+	float az;
+	float ay;
+	float ax;
 };
 
 // fog parameters:
@@ -263,41 +285,232 @@ Animate( )
 }
 
 
+// Draw the snowman using DrawSnowman()
+
+void DrawSnowman(){
+	// Draw a snow man using glutSolidSphere( ): 
+	
+	// Draw the ground:
+	// This will be moved to a function called DrawGround( )
+	glColor3f( 0.3f, 0.3f, 0.3f );
+	glBegin( GL_QUADS );
+		glNormal3f( 0.f, 1.f, 0.f );
+		glVertex3f( -10.f, 0.f, -10.f );
+		glVertex3f( -10.f, 0.f,  10.f );
+		glVertex3f(  10.f, 0.f,  10.f );
+		glVertex3f(  10.f, 0.f, -10.f );
+	glEnd( );
+
+	// Draw the body of the snowman using glutSolidSphere( ):
+	// This will be moved to a function called DrawSnowman( )
+	glColor3f( 1.f, 1.f, 1.f );
+	glPushMatrix( );
+		glTranslatef( 0.f, 0.75f, 0.f );
+		glutSolidSphere( 0.75f, 20, 20 );
+	glPopMatrix( );
+	glPushMatrix( );
+		glTranslatef( 0.f, 1.75f, 0.f );
+		glutSolidSphere( 0.5f, 20, 20 );	
+	glPopMatrix( );
+
+	// Draw the head of the snowman using glutSolidSphere( ):
+	// This will be moved to a function called DrawSnowman( )
+	glPushMatrix( );
+		glTranslatef( 0.f, 2.5f, 0.f );
+		glutSolidSphere( 0.25f, 20, 20 );
+	glPopMatrix( );
+
+	// Draw the right eye of the snowman using glutSolidSphere( ):
+	// This will be moved to a function called DrawSnowman( )
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		glTranslatef( 0.1f, 2.6f, 0.25f );
+		glutSolidSphere( 0.05f, 10, 10 );
+	glPopMatrix( );
+
+	// Draw the left eye of the snowman using glutSolidSphere( ):
+	// This will be moved to a function called DrawSnowman( )
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		glTranslatef( -0.1f, 2.6f, 0.25f );
+		glutSolidSphere( 0.05f, 10, 10 );
+	glPopMatrix( );
+
+	// Draw the nose of the snowman using glutSolidCone( ) on the head of the snowman:
+
+	glPushMatrix( );
+		glColor3f( 1.f, 0.5f, 0.f );
+		glTranslatef( 0.f, 2.5f, 0.25f );
+		glRotatef( 0.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		glutSolidCone( 0.08f, 0.5f, 10, 2 );
+	glPopMatrix( );
+
+
+	// Draw the arms of the snowman using gluCylinder( ) on the body of the snowman:
+
+	// Draw the right arm of the snowman using gluCylinder( ):
+	// use a brown color for the arm
+
+	glPushMatrix( );
+		glColor3f( 0.5f, 0.35f, 0.05f );
+		glTranslatef( 0.5f, 1.75f, 0.f );
+		glRotatef( 0.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		gluCylinder( gluNewQuadric( ), 0.05f, 0.05f, 1.f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw the left arm of the snowman using gluCylinder( ):
+	// use a brown color for the arm
+
+	glPushMatrix( );
+		glColor3f( 0.5f, 0.35f, 0.05f );
+		glTranslatef( -0.5f, 1.75f, 0.f );
+		glRotatef( 0.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		gluCylinder( gluNewQuadric( ), 0.05f, 0.05f, 1.f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw a hat on the snowman using gluCylinder( ) so that it is on the head of the snowman and it points up:
+
+	// Draw the hat of the snowman using gluCylinder( ):
+	// use a red color for the hat
+
+	glPushMatrix( );
+		glColor3f( 1.f, 0.f, 0.f );
+		// the hat is on the head of the snowman
+		glTranslatef( 0.f, 2.75f, 0.f );
+		// rotate the hat so that it points down
+		glRotatef( -90.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		gluCylinder( gluNewQuadric( ), 0.25f, 0.25f, 0.5f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw a brim on the hat using gluDisk( ) so that it is on the hat of the snowman:
+
+	// Draw the brim of the hat using gluDisk( ):
+	// use a red color for the brim
+
+	glPushMatrix( );
+		glColor3f( 1.f, 0.f, 0.f );
+		glTranslatef( 0.f, 2.75f, 0.f );
+		// rotate the brim so that it points up
+		glRotatef( 90.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		gluDisk( gluNewQuadric( ), 0.25f, 0.5f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw the top of the hat using gluDisk( ) so that it is on the hat of the snowman:
+
+	// Draw the top of the hat using gluDisk( ):
+	// use a red color for the top
+
+	glPushMatrix( );
+		glColor3f( 1.f, 0.f, 0.f );
+		glTranslatef( 0.f, 3.25f, 0.f );
+		// rotate the top so that it points up
+		glRotatef( 90.f, 1.f, 0.f, 0.f );
+		glRotatef( 0.f, 0.f, 1.f, 0.f );
+		glRotatef( 0.f, 0.f, 0.f, 1.f );
+		gluDisk( gluNewQuadric( ), 0.f, 0.25f, 10, 2 );
+	glPopMatrix( );
+	
+
+	// Draw the buttons of the snowman using glutSolidSphere( ) on the body of the snowman:
+
+	// Draw the first button of the snowman using glutSolidSphere( ):
+	// use a black color for the button
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the button is on the surface of the body of the snowman
+		glTranslatef( 0.f, 1.5f, .5f );
+		glutSolidSphere( 0.05f, 10, 10 );
+	glPopMatrix( );
+
+	// Draw the second button of the snowman using glutSolidSphere( ):
+	// use a black color for the button
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the button is on the surface of the body of the snowman
+		glTranslatef( 0.f, 2.f, .5f );
+		glutSolidSphere( 0.05f, 10, 10 );
+	glPopMatrix( );
+
+	// Draw the third button of the snowman using glutSolidSphere( ):
+	// use a black color for the button
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the button is on the surface of the body of the snowman
+		glTranslatef( 0.f, 1.f, .75f );
+		glutSolidSphere( 0.05f, 10, 10 );
+	glPopMatrix( );
+
+
+
+	// Draw the mouth of the snowman using small spheres under the nose of the snowman:
+
+	// Draw the first sphere of the mouth of the snowman using glutSolidSphere( ):
+	// use a black color for the sphere
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the sphere is on the surface of the nose of the snowman
+		glTranslatef( -.1f, 2.35f, 0.20f );
+		gluDisk( gluNewQuadric( ), 0.f, 0.05f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw the second sphere of the mouth of the snowman using glutSolidSphere( ):
+	// use a black color for the sphere
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the sphere is on the surface of the nose of the snowman
+		glTranslatef( .1f, 2.35f, 0.20f );
+		gluDisk( gluNewQuadric( ), 0.f, 0.05f, 10, 2 );
+	glPopMatrix( );
+
+	// Draw the third sphere of the mouth of the snowman using glutSolidSphere( ):
+	// use a black color for the sphere
+
+	glPushMatrix( );
+		glColor3f( 0.f, 0.f, 0.f );
+		// the sphere is on the surface of the nose of the snowman
+		glTranslatef( 0.f, 2.35f, 0.20f );
+		gluDisk( gluNewQuadric( ), 0.f, 0.05f, 10, 2 );
+	glPopMatrix( );
+
+
+}
 // Draw the complete scene:
 
 void Display( ){
 	// set which window we want to do the graphics into:
-
 	glutSetWindow( MainWindow );
-
-
 	// erase the background:
-
 	glDrawBuffer( GL_BACK );
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-
 	glEnable( GL_DEPTH_TEST );
 #ifdef DEMO_DEPTH_BUFFER
 	if( DepthBufferOn == 0 )
 		glDisable( GL_DEPTH_TEST );
 #endif
-
-
 	// specify shading to be flat:
-
 	glShadeModel( GL_FLAT );
-
-
 	// set the viewport to a square centered in the window:
-
 	GLsizei vx = glutGet( GLUT_WINDOW_WIDTH );
 	GLsizei vy = glutGet( GLUT_WINDOW_HEIGHT );
 	GLsizei v = vx < vy ? vx : vy;			// minimum dimension
 	GLint xl = ( vx - v ) / 2;
 	GLint yb = ( vy - v ) / 2;
 	glViewport( xl, yb,  v, v );
-
-
 	// set the viewing volume:
 	// remember that the Z clipping  values are actually
 	// given as DISTANCES IN FRONT OF THE EYE
@@ -309,27 +522,18 @@ void Display( ){
 		glOrtho( -2.f, 2.f,     -2.f, 2.f,     0.1f, 1000.f );
 	else
 		gluPerspective( 70.f, 1.f,	0.1f, 1000.f );
-
-
 	// place the objects into the scene:
-
 	glMatrixMode( GL_MODELVIEW );
 	glLoadIdentity( );
-
-
 	// set the eye position, look-at position, and up-vector:
-
-	gluLookAt( 0.f, 0.f, 3.f,     0.f, 0.f, 0.f,     0.f, 1.f, 0.f );
-
+	gluLookAt( 0.f, 2.f, 3.f,     0.f, 1.f, 0.f,     0.f, 1.f, 0.f );
 
 	// rotate the scene:
-
 	glRotatef( (GLfloat)Yrot, 0.f, 1.f, 0.f );
 	glRotatef( (GLfloat)Xrot, 1.f, 0.f, 0.f );
 
 
 	// uniformly scale the scene:
-
 	if( Scale < MINSCALE )
 		Scale = MINSCALE;
 	glScalef( (GLfloat)Scale, (GLfloat)Scale, (GLfloat)Scale );
@@ -365,16 +569,69 @@ void Display( ){
 
 	glEnable( GL_NORMALIZE );
 
+	
 
-	// draw the box object by calling up its display list:
-	glCallList( BoxList );
+		
+	// Animate particles falling from the sky:
+
+	// Draw the particles falling from the sky using glutSolidSphere( ):
+
+	// use a white color for the particles
+
+	glColor3f( 1.f, 1.f, 1.f );
+
+	// draw the particles falling from the sky
+	// initialize the particles position
+
+	struct Particle particles [NUM_PARTICLES];
+	for (int i = 0; i < NUM_PARTICLES; i++)
+	{
+		particles[i].x = 0.f;
+		particles[i].y = 0.f;
+		particles[i].z = 0.f;
+		particles[i].r = 0.05f;
+		particles[i].vx = 0.f;
+		particles[i].vy = 0.f;
+		particles[i].vz = 0.f;
+		particles[i].ax = 0.f;
+		particles[i].ay = 0.f;
+		particles[i].az = 0.f;
+		particles[i].life = 0.f;
+		particles[i].fade = 0.f;
+	}
+
+	for( int i = 0; i < 100; i++ )
+	{
+		glPushMatrix( );
+			glTranslatef( particles[ i ].x, particles[ i ].y, particles[ i ].z );
+			glutSolidSphere( 0.05f, 10, 10 );
+		glPopMatrix( );
+	}
+
+	// animate the particles falling from the sky
+
+	for( int i = 0; i < 100; i++ )
+	{
+		particles[ i ].x += particles[ i ].vx;
+		particles[ i ].y += particles[ i ].vy;
+		particles[ i ].z += particles[ i ].vz;
+		particles[ i ].vx += particles[ i ].ax;
+		particles[ i ].vy += particles[ i ].ay;
+		particles[ i ].vz += particles[ i ].az;
+		particles[ i ].life -= particles[ i ].fade;
+	}
+
+
+	// Draw the snowman:
+	DrawSnowman( );
+
 
 #ifdef DEMO_Z_FIGHTING
 	if( DepthFightingOn != 0 )
 	{
 		glPushMatrix( );
 			glRotatef( 90.f,   0.f, 1.f, 0.f );
-			glCallList( BoxList );
+			
 		glPopMatrix( );
 	}
 #endif
@@ -1385,3 +1642,4 @@ Unit(float vin[3], float vout[3])
 	}
 	return dist;
 }
+
