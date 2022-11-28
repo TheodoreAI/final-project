@@ -9,7 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <vector>
 
+using namespace std;
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -32,6 +34,7 @@
 #define SNOW	1
 #define	HAIL	2
 #define PI 		3.1415926535897932384626433832795
+#define OBJDELIMS		" \t"
 
 float slowdown = 2.0;
 float velocity = 0.0;
@@ -129,6 +132,29 @@ enum ButtonVals
 	QUIT
 };
 
+struct Vertex
+{
+	float x, y, z;
+};
+
+
+struct Normal
+{
+	float nx, ny, nz;
+};
+
+
+struct TextureCoord
+{
+	float s, t, p;
+};
+
+
+struct face
+{
+	int v, n, t;
+};
+
 // window background color (rgba):
 
 const GLfloat BACKCOLOR[ ] = { 0., 0., 0., 1. };
@@ -191,6 +217,7 @@ const GLfloat FOGEND      = 4.f;
 // non-constant global variables:
 int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
+GLuint  DogList;				// list to hold the dog
 int		AxesOn;					// != 0 means to draw the axes
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
@@ -245,14 +272,24 @@ void			Cross(float[3], float[3], float[3]);
 float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
 void 			DrawSnowman(int );
-void			InitLighting();
+void 			PointLight(int , float , float , float , float , float , float , float , float , float );
 void			DrawDog();
+int     		LoadObjFile( char * );
 
+char *			ReadRestOfLine( FILE * );
+void			ReadObjVTN( char *, int *, int *, int * );
 
 // Paticle System
 particles par_sys[MAX_PARTICLES]; 
 
-
+float *Array3( float a, float b, float c ) {
+	static float array[4];
+	array[0] = a;
+	array[1] = b;
+	array[2] = c; 
+	array[3] = 1.; 
+	return array;
+}
 // Initialize/Reset Particles - give them their attributes
 void initParticles(int i) {
 		par_sys[i].alive = true;
@@ -446,29 +483,17 @@ Animate( )
 }
 
 // Lighting initialization for ambient, diffuse, specular, and position
-void InitLighting( ) {
-	GLfloat ambient[] = { 0.2, 0.2, 0.2, 1.0 };
-	GLfloat diffuse[] = { 1.0, 1.0, 1.0, 1.0 };
-	GLfloat specular[] = { 1.0, 1.0, 1.0, 1.0 };
-	GLfloat position[] = { 0.0, 3.0, 3.0, 0.0 };
-	glLightfv(GL_LIGHT0, GL_AMBIENT, ambient);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, diffuse);
-	glLightfv(GL_LIGHT0, GL_SPECULAR, specular);
-	glLightfv(GL_LIGHT0, GL_POSITION, position);
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-	glEnable(GL_AUTO_NORMAL);
-	glEnable(GL_NORMALIZE);
+void PointLight( int ilight, float x, float y, float z, float r, float g, float b ){
+	// set up the ith light
+	glLightfv( ilight, GL_POSITION, Array3( x, y, z ) );
+	glLightfv( ilight, GL_AMBIENT, Array3( 0., 0., 0. ) );
+	glLightfv( ilight, GL_DIFFUSE, Array3( r, g, b ) ); 
+	glLightfv( ilight, GL_SPECULAR, Array3( r, g, b ) ); 
+	glLightf ( ilight, GL_CONSTANT_ATTENUATION, 1. ); 
+	glLightf ( ilight, GL_LINEAR_ATTENUATION, 0. ); 
+	glLightf ( ilight, GL_QUADRATIC_ATTENUATION, 0. ); 
 }
 
-void DrawDog( ) {
-	glPushMatrix();
-		glTranslatef(0.0, 0.0, 0.0);
-		glScalef(0.5, 0.5, 0.5);
-		glRotatef(90.0, 0.0, 1.0, 0.0);
-		glCallList(Dog);
-	glPopMatrix();
-}
 
 
 
@@ -771,8 +796,51 @@ void Display( ){
 
 	// use a white color for the particles
 
-	glColor3f( 1.f, 1.f, 1.f );
-	InitLighting( );
+	
+	glEnable(GL_LIGHTING);
+	glPushMatrix();
+		glTranslatef(0.0, 2.0, 0.0);
+		// glutSolidSphere(0.1, 20, 20);
+		// point light with yellow color
+		GLfloat yellow[] = { 1.0, 1.0, 0.0, 1.0 };
+		GLfloat white[] = { 1.0, 1.0, 1.0, 1.0 };
+		GLfloat black[] = { 0.0, 0.0, 0.0, 1.0 };
+
+		// position of the light
+		GLfloat lightPos[] = { 0.0, 2.0, 0.0, 1.0 };
+
+		// set the light properties
+		glLightfv(GL_LIGHT0, GL_AMBIENT, black);
+		glLightfv(GL_LIGHT0, GL_DIFFUSE, yellow);
+		glLightfv(GL_LIGHT0, GL_SPECULAR, white);
+		glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+
+		// enable the light
+		glEnable(GL_LIGHT0);
+
+		// enable the depth test
+		glEnable(GL_DEPTH_TEST);
+
+		// enable the lighting
+		glEnable(GL_LIGHTING);
+
+		// enable the color material mode
+		glEnable(GL_COLOR_MATERIAL);
+
+		// set the material properties which will be assigned by glColor
+		glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
+
+	glPopMatrix();
+	glDisable(GL_LIGHTING);
+	// Draw a dog 
+	glPushMatrix();
+		// make a non-uniform color between brown and black
+		glColor3f(0.5, 0.25, 0.0);
+		glTranslatef(0.f, 0.f, 0.f);
+		glRotatef(360*Time, 0.f, 1.f, 0.f);
+		glScalef(0.5f, 0.5f, 0.5f);
+		glCallList(DogList);
+	glPopMatrix();
 
 	// draw the particles falling from the sky
 	// initialize the particles position		
@@ -790,12 +858,7 @@ void Display( ){
 		DrawSnowman(0);
 	glPopMatrix();
 
-	// Draw a dog 
-	glPushMatrix();
-		glTranslatef(0.f, 0.f, 0.f);
-		glRotatef(360*Time, 0.f, 1.f, 0.f);
-		DrawDog(0);
-	glPopMatrix();
+	
 
 
 #ifdef DEMO_Z_FIGHTING
@@ -803,7 +866,7 @@ void Display( ){
 	{
 		glPushMatrix( );
 			glRotatef( 90.f,   0.f, 1.f, 0.f );
-			
+			glCallList( DogList );
 		glPopMatrix( );
 	}
 #endif
@@ -1162,9 +1225,7 @@ void InitLists( ){
 	DogList = glGenLists( 1 );
 	glNewList( DogList, GL_COMPILE );
 		// Make the dog with an obj file
-	
-
-
+		LoadObjFile( "dog.obj" );
 	glEndList( );
 
 
@@ -1827,3 +1888,358 @@ Unit(float vin[3], float vout[3])
 	return dist;
 }
 
+int LoadObjFile( char *name )
+{
+	char *cmd;		// the command string
+	char *str;		// argument string
+
+	std::vector <struct Vertex> Vertices(10000);
+	std::vector <struct Normal> Normals(10000);
+	std::vector <struct TextureCoord> TextureCoords(10000);
+
+	Vertices.clear();
+	Normals.clear();
+	TextureCoords.clear();
+
+	struct Vertex sv;
+	struct Normal sn;
+	struct TextureCoord st;
+
+
+	// open the input file:
+
+	FILE *fp = fopen( name, "r" );
+	if( fp == NULL )
+	{
+		fprintf( stderr, "Cannot open .obj file '%s'\n", name );
+		return 1;
+	}
+
+
+	float xmin = 1.e+37f;
+	float ymin = 1.e+37f;
+	float zmin = 1.e+37f;
+	float xmax = -xmin;
+	float ymax = -ymin;
+	float zmax = -zmin;
+
+	glBegin( GL_TRIANGLES );
+
+	for( ; ; )
+	{
+		char *line = ReadRestOfLine( fp );
+		if( line == NULL )
+			break;
+
+
+		// skip this line if it is a comment:
+
+		if( line[0] == '#' )
+			continue;
+
+
+		// skip this line if it is something we don't feel like handling today:
+
+		if( line[0] == 'g' )
+			continue;
+
+		if( line[0] == 'm' )
+			continue;
+
+		if( line[0] == 's' )
+			continue;
+
+		if( line[0] == 'u' )
+			continue;
+
+
+		// get the command string:
+
+		cmd = strtok( line, OBJDELIMS );
+
+
+		// skip this line if it is empty:
+
+		if( cmd == NULL )
+			continue;
+
+
+		if( strcmp( cmd, "v" )  ==  0 )
+		{
+			str = strtok( NULL, OBJDELIMS );
+			sv.x = atof(str);
+
+			str = strtok( NULL, OBJDELIMS );
+			sv.y = atof(str);
+
+			str = strtok( NULL, OBJDELIMS );
+			sv.z = atof(str);
+
+			Vertices.push_back( sv );
+
+			if( sv.x < xmin )	xmin = sv.x;
+			if( sv.x > xmax )	xmax = sv.x;
+			if( sv.y < ymin )	ymin = sv.y;
+			if( sv.y > ymax )	ymax = sv.y;
+			if( sv.z < zmin )	zmin = sv.z;
+			if( sv.z > zmax )	zmax = sv.z;
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "vn" )  ==  0 )
+		{
+			str = strtok( NULL, OBJDELIMS );
+			sn.nx = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			sn.ny = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			sn.nz = atof( str );
+
+			Normals.push_back( sn );
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "vt" )  ==  0 )
+		{
+			st.s = st.t = st.p = 0.;
+
+			str = strtok( NULL, OBJDELIMS );
+			st.s = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			if( str != NULL )
+				st.t = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			if( str != NULL )
+				st.p = atof( str );
+
+			TextureCoords.push_back( st );
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "f" )  ==  0 )
+		{
+			struct face vertices[10];
+			for( int i = 0; i < 10; i++ )
+			{
+				vertices[i].v = 0;
+				vertices[i].n = 0;
+				vertices[i].t = 0;
+			}
+
+			int sizev = (int)Vertices.size();
+			int sizen = (int)Normals.size();
+			int sizet = (int)TextureCoords.size();
+
+			int numVertices = 0;
+			bool valid = true;
+			int vtx = 0;
+			char *str;
+			while( ( str = strtok( NULL, OBJDELIMS ) )  !=  NULL )
+			{
+				int v, n, t;
+				ReadObjVTN( str, &v, &t, &n );
+
+				// if v, n, or t are negative, they are wrt the end of their respective list:
+
+				if( v < 0 )
+					v += ( sizev + 1 );
+
+				if( n < 0 )
+					n += ( sizen + 1 );
+
+				if( t < 0 )
+					t += ( sizet + 1 );
+
+
+				// be sure we are not out-of-bounds (<vector> will abort):
+
+				if( t > sizet )
+				{
+					if( t != 0 )
+						fprintf( stderr, "Read texture coord %d, but only have %d so far\n", t, sizet );
+					t = 0;
+				}
+
+				if( n > sizen )
+				{
+					if( n != 0 )
+						fprintf( stderr, "Read normal %d, but only have %d so far\n", n, sizen );
+					n = 0;
+				}
+
+				if( v > sizev )
+				{
+					if( v != 0 )
+						fprintf( stderr, "Read vertex coord %d, but only have %d so far\n", v, sizev );
+					v = 0;
+					valid = false;
+				}
+
+				vertices[vtx].v = v;
+				vertices[vtx].n = n;
+				vertices[vtx].t = t;
+				vtx++;
+
+				if( vtx >= 10 )
+					break;
+
+				numVertices++;
+			}
+
+
+			// if vertices are invalid, don't draw anything this time:
+
+			if( ! valid )
+				continue;
+
+			if( numVertices < 3 )
+				continue;
+
+
+			// list the vertices:
+
+			int numTriangles = numVertices - 2;
+
+			for( int it = 0; it < numTriangles; it++ )
+			{
+				int vv[3];
+				vv[0] = 0;
+				vv[1] = it + 1;
+				vv[2] = it + 2;
+
+				// get the planar normal, in case vertex normals are not defined:
+
+				struct Vertex *v0 = &Vertices[ vertices[ vv[0] ].v - 1 ];
+				struct Vertex *v1 = &Vertices[ vertices[ vv[1] ].v - 1 ];
+				struct Vertex *v2 = &Vertices[ vertices[ vv[2] ].v - 1 ];
+
+				float v01[3], v02[3], norm[3];
+				v01[0] = v1->x - v0->x;
+				v01[1] = v1->y - v0->y;
+				v01[2] = v1->z - v0->z;
+				v02[0] = v2->x - v0->x;
+				v02[1] = v2->y - v0->y;
+				v02[2] = v2->z - v0->z;
+				Cross( v01, v02, norm );
+				Unit( norm, norm );
+				glNormal3fv( norm );
+
+				for( int vtx = 0; vtx < 3 ; vtx++ )
+				{
+					if( vertices[ vv[vtx] ].t != 0 )
+					{
+						struct TextureCoord *tp = &TextureCoords[ vertices[ vv[vtx] ].t - 1 ];
+						glTexCoord2f( tp->s, tp->t );
+					}
+
+					if( vertices[ vv[vtx] ].n != 0 )
+					{
+						struct Normal *np = &Normals[ vertices[ vv[vtx] ].n - 1 ];
+						glNormal3f( np->nx, np->ny, np->nz );
+					}
+
+					struct Vertex *vp = &Vertices[ vertices[ vv[vtx] ].v - 1 ];
+					glVertex3f( vp->x, vp->y, vp->z );
+				}
+			}
+			continue;
+		}
+
+
+		if( strcmp( cmd, "s" )  ==  0 )
+		{
+			continue;
+		}
+
+	}
+
+	glEnd();
+	fclose( fp );
+
+	fprintf( stderr, "Obj file range: [%8.3f,%8.3f,%8.3f] -> [%8.3f,%8.3f,%8.3f]\n",
+		xmin, ymin, zmin,  xmax, ymax, zmax );
+	fprintf( stderr, "Obj file center = (%8.3f,%8.3f,%8.3f)\n",
+		(xmin+xmax)/2., (ymin+ymax)/2., (zmin+zmax)/2. );
+	fprintf( stderr, "Obj file  span = (%8.3f,%8.3f,%8.3f)\n",
+		xmax-xmin, ymax-ymin, zmax-zmin );
+
+	return 0;
+}
+
+char *
+ReadRestOfLine( FILE *fp )
+{
+	static char *line;
+	std::vector<char> tmp(1000);
+	tmp.clear();
+
+	for( ; ; )
+	{
+		int c = getc( fp );
+
+		if( c == EOF  &&  tmp.size() == 0 )
+		{
+			return NULL;
+		}
+
+		if( c == EOF  ||  c == '\n' )
+		{
+			delete [] line;
+			line = new char [ tmp.size()+1 ];
+			for( int i = 0; i < (int)tmp.size(); i++ )
+			{
+				line[i] = tmp[i];
+			}
+			line[ tmp.size() ] = '\0';	// terminating null
+			return line;
+		}
+		else
+		{
+			tmp.push_back( c );
+		}
+	}
+
+	return "";
+}
+
+
+
+void
+ReadObjVTN( char *str, int *v, int *t, int *n )
+{
+	// can be one of v, v//n, v/t, v/t/n:
+
+	if( strstr( str, "//") )				// v//n
+	{
+		*t = 0;
+		sscanf( str, "%d//%d", v, n );
+		return;
+	}
+	else if( sscanf( str, "%d/%d/%d", v, t, n ) == 3 )	// v/t/n
+	{
+		return;
+	}
+	else
+	{
+		*n = 0;
+		if( sscanf( str, "%d/%d", v, t ) == 2 )		// v/t
+		{
+			return;
+		}
+		else						// v
+		{
+			*n = *t = 0;
+			sscanf( str, "%d", v );
+		}
+	}
+}
