@@ -2,12 +2,16 @@
 //	Description: Entry point for the final project
 //	Last Modified: 2022-12-06
 //	Notes:
+// 	Resources for the snow animation:
+// 	https://users.soe.ucsc.edu/~pang/161/w09/submit/projects/mang/finalproject.html
 
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <vector>
 
+using namespace std;
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -23,10 +27,53 @@
 
 #define MS_PER_CYCLE	10000
 
+#define MAX_PARTICLES 1000
+#define WCX		640
+#define WCY		480
+#define RAIN	0
+#define SNOW	1
+#define	HAIL	2
+#define PI 		3.1415926535897932384626433832795
+#define OBJDELIMS		" \t"
 
+float slowdown = 2.0;
+float velocity = 0.0;
+float zoom = 20.0;
+float pan = 0.0;
+float tilt = 0.0;
+
+int loop;
+int fall;
+
+//floor colors
+float r = 0.0;
+float g = 1.0;
+float b = 0.0;
+float ground_points[100][100][3];
+float ground_colors[100][100][4];
+float accum = -10.0;
+
+typedef struct {
+	// Life
+	bool alive;	// is the particle alive?
+	float life;	// particle lifespan
+	float fade; // decay
+	// color
+	float red; 
+	float green;
+	float blue;
+	// Position/direction
+	float xpos; 
+	float ypos; 
+	float zpos;
+	// Velocity/Direction, only goes down in y dir
+	float vel;
+	// Gravity
+	float gravity;
+}particles;
 // title of these windows:
 
-const char *WINDOWTITLE = "OpenGL / GLUT Sample -- Joe Graphics";
+const char *WINDOWTITLE = "OpenGL Final Project - Mateo Estrada Jorge";
 const char *GLUITITLE   = "User Interface Window";
 
 // what the glui package defines as true and false:
@@ -40,7 +87,7 @@ const int ESCAPE = 0x1b;
 
 // initial window size:
 
-const int INIT_WINDOW_SIZE = 600;
+const int INIT_WINDOW_SIZE = 900;
 
 // size of the 3d box to be drawn:
 
@@ -83,6 +130,29 @@ enum ButtonVals
 {
 	RESET,
 	QUIT
+};
+
+struct Vertex
+{
+	float x, y, z;
+};
+
+
+struct Normal
+{
+	float nx, ny, nz;
+};
+
+
+struct TextureCoord
+{
+	float s, t, p;
+};
+
+
+struct face
+{
+	int v, n, t;
 };
 
 // window background color (rgba):
@@ -136,29 +206,6 @@ const GLfloat Colors[ ][3] =
 	{ 0., 0., 0. },		// black
 };
 
-// array of particles
-const int NUM_PARTICLES = 100;
-struct Particle
-{
-	float x;
-	float y;
-	float z;
-	float vx;
-	float vy;
-	float vz;
-	float r;
-	float g;
-	float b;
-	float life;
-	float decay;
-	float size;
-	float weight;
-	float fade;
-	float az;
-	float ay;
-	float ax;
-};
-
 // fog parameters:
 
 const GLfloat FOGCOLOR[4] = { .0f, .0f, .0f, 1.f };
@@ -170,6 +217,8 @@ const GLfloat FOGEND      = 4.f;
 // non-constant global variables:
 int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
+GLuint  DogList;				// list to hold the dog
+GLuint  TreeList;				// list to hold the tree
 int		AxesOn;					// != 0 means to draw the axes
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
@@ -187,7 +236,7 @@ float   Time;				   // time in seconds
 
 // Project specific variables
 bool    Freeze;                 // freeze animation
-
+bool    LightOn;
 // Function prototypes:
 void	Animate( );
 void	Display( );
@@ -223,8 +272,159 @@ void			HsvRgb( float[3], float [3] );
 void			Cross(float[3], float[3], float[3]);
 float			Dot(float [3], float [3]);
 float			Unit(float [3], float [3]);
+void 			DrawSnowman(int );
+void 			PointLight(int , float , float , float , float , float , float , float , float , float );
+void			DrawDog();
+int     		LoadObjFile( char * );
 
+char *			ReadRestOfLine( FILE * );
+void			ReadObjVTN( char *, int *, int *, int * );
 
+// Paticle System
+particles par_sys[MAX_PARTICLES]; 
+
+float *Array3( float a, float b, float c ) {
+	static float array[4];
+	array[0] = a;
+	array[1] = b;
+	array[2] = c; 
+	array[3] = 1.; 
+	return array;
+}
+// Initialize/Reset Particles - give them their attributes
+void initParticles(int i) {
+		par_sys[i].alive = true;
+		par_sys[i].life = 1.0;
+		par_sys[i].fade = float(rand()%100)/1000.0f+0.003f;
+		
+		par_sys[i].xpos = (float) (rand() % 100) - 10;
+		par_sys[i].ypos = 10.0;
+		par_sys[i].zpos = (float) (rand() % 100) - 10;
+		
+		par_sys[i].red = 0.5;
+		par_sys[i].green = 0.5;
+		par_sys[i].blue = 1.0;
+		
+		par_sys[i].vel = velocity;
+		par_sys[i].gravity = -0.8;//-0.8;
+
+}
+
+void init( ) {
+	int x, z;
+
+    glShadeModel(GL_SMOOTH);
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glClearDepth(1.0);
+    glEnable(GL_DEPTH_TEST);
+
+	// Ground Verticies
+    // Ground Colors
+    for (z = 0; z < 100; z++) {
+    	for (x = 0; x < 100; x++) {
+    		ground_points[x][z][0] = x - 10.0;
+    		ground_points[x][z][1] = accum;
+    		ground_points[x][z][2] = z - 10.0;
+    	
+    		ground_colors[z][x][0] = r; // red value
+    		ground_colors[z][x][1] = g; // green value
+    		ground_colors[z][x][2] = b; // blue value
+    		ground_colors[z][x][3] = 0.0; // acummulation factor
+    	}
+    }  
+    
+    // Initialize particles
+    for (loop = 0; loop < MAX_PARTICLES; loop++) {
+        initParticles(loop);
+    }
+}
+
+// For Snow
+void drawSnow() {
+	float x, y, z;
+	for (loop = 0; loop < MAX_PARTICLES; loop=loop+2) {
+		if (par_sys[loop].alive == true) {			
+			x = par_sys[loop].xpos;
+			y = par_sys[loop].ypos + zoom;
+			z = par_sys[loop].zpos ;
+			
+			// Draw particles
+			glColor3f(1.0, 1.0, 1.0);
+			glPushMatrix();
+			glTranslatef(x, y, z);
+			glutSolidSphere(0.2, 16, 16);
+			glPopMatrix();
+			
+			// Update values
+			//Move
+			par_sys[loop].ypos += par_sys[loop].vel / (slowdown*1000);
+			par_sys[loop].vel += par_sys[loop].gravity;
+			// Decay
+			par_sys[loop].life -= par_sys[loop].fade;
+
+			if (par_sys[loop].ypos <= -10) {
+				int zi = z + 10;
+				int xi = x + 10;
+				ground_colors[zi][xi][0] = 1.0;
+				ground_colors[zi][xi][2] = 1.0;
+				ground_colors[zi][xi][3] += 1.0;
+				if (ground_colors[zi][xi][3] > 1.0) {
+					ground_points[xi][zi][1] += 0.1;
+				}
+				par_sys[loop].life = -1.0;
+			}
+
+			//Revive 
+			if (par_sys[loop].life < 0.0) {
+				initParticles(loop);
+			}
+		}
+	}
+}
+
+// Draw Particles
+void drawScene( ) {
+	int i, j;
+	glPushMatrix();
+		
+		glRotatef(pan, 0.0, 1.0, 0.0);
+		glRotatef(tilt, 1.0, 0.0, 0.0);
+		// GROUND
+		// move to the center of the scene
+		glTranslatef(0.0, -10.0, 0.0);
+		glColor3f(0.0, 0.9, 0.1);
+		glBegin(GL_QUADS);
+			// along z - y const
+			for (i = -10; i+1 < 89; i++) {
+				// along x - y const
+				for (j = -10; j+1 < 89; j++) {
+					glColor3fv(ground_colors[i+10][j+10]);
+					glVertex3f(ground_points[j+10][i+10][0], 
+								ground_points[j+10][i+10][1]  + zoom, 
+								ground_points[j+10][i+10][2]);
+					glColor3fv(ground_colors[i+10][j+1+10]);
+					glVertex3f(ground_points[j+1+10][i+10][0], 
+								ground_points[j+1+10][i+10][1]  + zoom,
+								ground_points[j+1+10][i+10][2]);
+					glColor3fv(ground_colors[i+1+10][j+1+10]);
+					glVertex3f(ground_points[j+1+10][i+1+10][0],
+								ground_points[j+1+10][i+1+10][1]  + zoom,
+								ground_points[j+1+10][i+1+10][2]);
+					glColor3fv(ground_colors[i+1+10][j+10]);
+					glVertex3f(ground_points[j+10][i+1+10][0],
+								ground_points[j+10][i+1+10][1] + zoom,
+								ground_points[j+10][i+1+10][2]);			
+				}
+			
+			}
+		glEnd();
+		// Which Particles
+	
+	drawSnow();
+	glPopMatrix();
+	
+}
+						 
 // Main program:
 int
 main( int argc, char *argv[ ] )
@@ -243,6 +443,7 @@ main( int argc, char *argv[ ] )
 
 	InitLists( );
 
+	init();
 	// init all the global variables used by Display( ):
 	// this will also post a redisplay
 
@@ -284,25 +485,41 @@ Animate( )
 	glutPostRedisplay( );
 }
 
+// Lighting initialization for ambient, diffuse, specular, and position
+void PointLight( int ilight, float x, float y, float z, float r, float g, float b ){
+	// set up the ith light
+	glLightfv( ilight, GL_POSITION, Array3( x, y, z ) );
+	glLightfv( ilight, GL_AMBIENT, Array3( 0., 0., 0. ) );
+	glLightfv( ilight, GL_DIFFUSE, Array3( r, g, b ) ); 
+	glLightfv( ilight, GL_SPECULAR, Array3( r, g, b ) ); 
+	glLightf ( ilight, GL_CONSTANT_ATTENUATION, 1. ); 
+	glLightf ( ilight, GL_LINEAR_ATTENUATION, 0. ); 
+	glLightf ( ilight, GL_QUADRATIC_ATTENUATION, 0. ); 
+}
 
 // Draw the snowman using DrawSnowman()
-
-void DrawSnowman(){
+void DrawSnowman(int gender){
 	// Draw a snow man using glutSolidSphere( ): 
-	
-	// Draw the ground:
-	// This will be moved to a function called DrawGround( )
-	glColor3f( 0.3f, 0.3f, 0.3f );
-	glBegin( GL_QUADS );
-		glNormal3f( 0.f, 1.f, 0.f );
-		glVertex3f( -10.f, 0.f, -10.f );
-		glVertex3f( -10.f, 0.f,  10.f );
-		glVertex3f(  10.f, 0.f,  10.f );
-		glVertex3f(  10.f, 0.f, -10.f );
-	glEnd( );
-
 	// Draw the body of the snowman using glutSolidSphere( ):
 	// This will be moved to a function called DrawSnowman( )
+
+	// Color of hat for male
+	float hatR;
+	float hatG;
+	float hatB;
+	if (gender == 1){
+		// blue hat
+
+		hatR = 0.0;
+		hatG = 0.1;
+		hatB = 0.8;
+	}else{
+		// pink hat
+		hatR = 0.8;
+		hatG = 0.1;
+		hatB = 0.8;
+	}
+	// Draw the body of the snowman using glutSolidSphere( ):
 	glColor3f( 1.f, 1.f, 1.f );
 	glPushMatrix( );
 		glTranslatef( 0.f, 0.75f, 0.f );
@@ -380,7 +597,7 @@ void DrawSnowman(){
 	// use a red color for the hat
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		// the hat is on the head of the snowman
 		glTranslatef( 0.f, 2.75f, 0.f );
 		// rotate the hat so that it points down
@@ -396,7 +613,7 @@ void DrawSnowman(){
 	// use a red color for the brim
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		glTranslatef( 0.f, 2.75f, 0.f );
 		// rotate the brim so that it points up
 		glRotatef( 90.f, 1.f, 0.f, 0.f );
@@ -411,7 +628,7 @@ void DrawSnowman(){
 	// use a red color for the top
 
 	glPushMatrix( );
-		glColor3f( 1.f, 0.f, 0.f );
+		glColor3f( hatR, hatG, hatB );
 		glTranslatef( 0.f, 3.25f, 0.f );
 		// rotate the top so that it points up
 		glRotatef( 90.f, 1.f, 0.f, 0.f );
@@ -491,6 +708,10 @@ void DrawSnowman(){
 }
 // Draw the complete scene:
 
+// Simple Harmonic Oscillator equation
+float SimpleHarmonicOscillator( float t, float A ){
+	return ( float ) ( A * sin( ( 2*PI*t )) );
+}
 void Display( ){
 	// set which window we want to do the graphics into:
 	glutSetWindow( MainWindow );
@@ -555,75 +776,59 @@ void Display( ){
 		glDisable( GL_FOG );
 	}
 
-
-	// possibly draw the axes:
-
 	if( AxesOn != 0 )
 	{
 		glColor3fv( &Colors[WhichColor][0] );
 		glCallList( AxesList );
 	}
 
-
-	// since we are using glScalef( ), be sure the normals get unitized:
-
-	glEnable( GL_NORMALIZE );
-
 	
+	const float x = 50.0;
+	const float y = 50.0;
+	const float z = 50.0;
+	
+	glEnable( GL_NORMALIZE );
+	glShadeModel( GL_SMOOTH );
 
+	( LightOn) ? glEnable(GL_LIGHT0): glDisable(GL_LIGHT0);
+	
+	glPushMatrix();
+		glTranslatef(x, y, z);
+		glColor3f( 1.f, 1.f, 0.f );
+		PointLight(GL_LIGHT0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0);
+		glutSolidSphere(10, 20, 20);
+	glPopMatrix();
+	
+	// Draw a dog 
+	glPushMatrix();
+		// make a non-uniform color between brown and black
+		glColor3f(0.5, 0.25, 0.0);
+		glTranslatef(0.f, 0.f, 0.f);
 		
-	// Animate particles falling from the sky:
-
-	// Draw the particles falling from the sky using glutSolidSphere( ):
-
-	// use a white color for the particles
-
-	glColor3f( 1.f, 1.f, 1.f );
+		glScalef(0.5f, 0.5f, 0.5f);
+		glCallList(DogList);
+	glPopMatrix();
 
 	// draw the particles falling from the sky
-	// initialize the particles position
-
-	struct Particle particles [NUM_PARTICLES];
-	for (int i = 0; i < NUM_PARTICLES; i++)
-	{
-		particles[i].x = 0.f;
-		particles[i].y = 0.f;
-		particles[i].z = 0.f;
-		particles[i].r = 0.05f;
-		particles[i].vx = 0.f;
-		particles[i].vy = 0.f;
-		particles[i].vz = 0.f;
-		particles[i].ax = 0.f;
-		particles[i].ay = 0.f;
-		particles[i].az = 0.f;
-		particles[i].life = 0.f;
-		particles[i].fade = 0.f;
-	}
-
-	for( int i = 0; i < 100; i++ )
-	{
-		glPushMatrix( );
-			glTranslatef( particles[ i ].x, particles[ i ].y, particles[ i ].z );
-			glutSolidSphere( 0.05f, 10, 10 );
-		glPopMatrix( );
-	}
-
-	// animate the particles falling from the sky
-
-	for( int i = 0; i < 100; i++ )
-	{
-		particles[ i ].x += particles[ i ].vx;
-		particles[ i ].y += particles[ i ].vy;
-		particles[ i ].z += particles[ i ].vz;
-		particles[ i ].vx += particles[ i ].ax;
-		particles[ i ].vy += particles[ i ].ay;
-		particles[ i ].vz += particles[ i ].az;
-		particles[ i ].life -= particles[ i ].fade;
-	}
-
-
+	// initialize the particles position		
+	drawScene();
 	// Draw the snowman:
-	DrawSnowman( );
+	glPushMatrix();
+		glTranslatef(SimpleHarmonicOscillator(Time, 3), 0.f, SimpleHarmonicOscillator(Time, 3));
+		glRotatef(360*Time, 0.f, 1.f, 0.f);
+		DrawSnowman(1);
+	glPopMatrix();
+	glPushMatrix();
+		glTranslatef(3*SimpleHarmonicOscillator(Time, 5), 0.f, SimpleHarmonicOscillator(Time, 5));
+		glRotatef(-360*Time, 0.f, 1.f, 0.f);
+		DrawSnowman(0);
+	glPopMatrix();
+	glCallList(TreeList);
+
+	
+	
+
+	
 
 
 #ifdef DEMO_Z_FIGHTING
@@ -631,7 +836,7 @@ void Display( ){
 	{
 		glPushMatrix( );
 			glRotatef( 90.f,   0.f, 1.f, 0.f );
-			
+			glCallList( DogList );
 		glPopMatrix( );
 	}
 #endif
@@ -987,6 +1192,34 @@ void InitLists( ){
 	glutSetWindow( MainWindow );
 
 	// create the object(s):
+	DogList = glGenLists( 1 );
+	glNewList( DogList, GL_COMPILE );
+		// Make the dog with an obj file
+		LoadObjFile( "dog.obj" );
+	glEndList( );
+
+
+	// create a tree with the tree list
+	TreeList = glGenLists( 1 );
+	glNewList( TreeList, GL_COMPILE );
+		
+	// Draw trees:
+	const int NUM_TREES = 100;
+	for(int i = 0; i < NUM_TREES; i++){
+		float locationX = (rand() % 50) - 10;
+		float locationZ = (rand() % 50) - 10;
+		glPushMatrix();
+			glTranslatef(locationX, -1.5f, locationZ);
+			// dark green
+			glColor3f(0.0, 0.5, 0.0);
+			glRotatef(360, 0.f, 1.f, 0.f);
+			glScalef(0.5f, 0.5f, 0.5f);
+			// Make the tree with an obj file
+			LoadObjFile( "tree.obj" );
+		glPopMatrix();
+	}
+	glEndList( );
+
 
 	// create the axes:
 
@@ -1008,6 +1241,9 @@ Keyboard( unsigned char c, int x, int y )
 		fprintf( stderr, "Keyboard: '%c' (0x%0x)\n", c, c );
 
 	switch( c ){
+		case '0':
+			LightOn = !LightOn;
+			break;
 		case 'f':
 		case 'F':
 			Freeze = !Freeze;
@@ -1031,7 +1267,11 @@ Keyboard( unsigned char c, int x, int y )
 		case ESCAPE:
 			DoMainMenu( QUIT );	// will not return here
 			break;				// happy compiler
-
+		case 's':
+		case 'S':
+			fall = SNOW;
+			break;
+	
 		default:
 			fprintf( stderr, "Don't know what to do with keyboard hit: '%c' (0x%0x)\n", c, c );
 	}
@@ -1643,3 +1883,358 @@ Unit(float vin[3], float vout[3])
 	return dist;
 }
 
+int LoadObjFile( char *name )
+{
+	char *cmd;		// the command string
+	char *str;		// argument string
+
+	std::vector <struct Vertex> Vertices(10000);
+	std::vector <struct Normal> Normals(10000);
+	std::vector <struct TextureCoord> TextureCoords(10000);
+
+	Vertices.clear();
+	Normals.clear();
+	TextureCoords.clear();
+
+	struct Vertex sv;
+	struct Normal sn;
+	struct TextureCoord st;
+
+
+	// open the input file:
+
+	FILE *fp = fopen( name, "r" );
+	if( fp == NULL )
+	{
+		fprintf( stderr, "Cannot open .obj file '%s'\n", name );
+		return 1;
+	}
+
+
+	float xmin = 1.e+37f;
+	float ymin = 1.e+37f;
+	float zmin = 1.e+37f;
+	float xmax = -xmin;
+	float ymax = -ymin;
+	float zmax = -zmin;
+
+	glBegin( GL_TRIANGLES );
+
+	for( ; ; )
+	{
+		char *line = ReadRestOfLine( fp );
+		if( line == NULL )
+			break;
+
+
+		// skip this line if it is a comment:
+
+		if( line[0] == '#' )
+			continue;
+
+
+		// skip this line if it is something we don't feel like handling today:
+
+		if( line[0] == 'g' )
+			continue;
+
+		if( line[0] == 'm' )
+			continue;
+
+		if( line[0] == 's' )
+			continue;
+
+		if( line[0] == 'u' )
+			continue;
+
+
+		// get the command string:
+
+		cmd = strtok( line, OBJDELIMS );
+
+
+		// skip this line if it is empty:
+
+		if( cmd == NULL )
+			continue;
+
+
+		if( strcmp( cmd, "v" )  ==  0 )
+		{
+			str = strtok( NULL, OBJDELIMS );
+			sv.x = atof(str);
+
+			str = strtok( NULL, OBJDELIMS );
+			sv.y = atof(str);
+
+			str = strtok( NULL, OBJDELIMS );
+			sv.z = atof(str);
+
+			Vertices.push_back( sv );
+
+			if( sv.x < xmin )	xmin = sv.x;
+			if( sv.x > xmax )	xmax = sv.x;
+			if( sv.y < ymin )	ymin = sv.y;
+			if( sv.y > ymax )	ymax = sv.y;
+			if( sv.z < zmin )	zmin = sv.z;
+			if( sv.z > zmax )	zmax = sv.z;
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "vn" )  ==  0 )
+		{
+			str = strtok( NULL, OBJDELIMS );
+			sn.nx = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			sn.ny = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			sn.nz = atof( str );
+
+			Normals.push_back( sn );
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "vt" )  ==  0 )
+		{
+			st.s = st.t = st.p = 0.;
+
+			str = strtok( NULL, OBJDELIMS );
+			st.s = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			if( str != NULL )
+				st.t = atof( str );
+
+			str = strtok( NULL, OBJDELIMS );
+			if( str != NULL )
+				st.p = atof( str );
+
+			TextureCoords.push_back( st );
+
+			continue;
+		}
+
+
+		if( strcmp( cmd, "f" )  ==  0 )
+		{
+			struct face vertices[10];
+			for( int i = 0; i < 10; i++ )
+			{
+				vertices[i].v = 0;
+				vertices[i].n = 0;
+				vertices[i].t = 0;
+			}
+
+			int sizev = (int)Vertices.size();
+			int sizen = (int)Normals.size();
+			int sizet = (int)TextureCoords.size();
+
+			int numVertices = 0;
+			bool valid = true;
+			int vtx = 0;
+			char *str;
+			while( ( str = strtok( NULL, OBJDELIMS ) )  !=  NULL )
+			{
+				int v, n, t;
+				ReadObjVTN( str, &v, &t, &n );
+
+				// if v, n, or t are negative, they are wrt the end of their respective list:
+
+				if( v < 0 )
+					v += ( sizev + 1 );
+
+				if( n < 0 )
+					n += ( sizen + 1 );
+
+				if( t < 0 )
+					t += ( sizet + 1 );
+
+
+				// be sure we are not out-of-bounds (<vector> will abort):
+
+				if( t > sizet )
+				{
+					if( t != 0 )
+						fprintf( stderr, "Read texture coord %d, but only have %d so far\n", t, sizet );
+					t = 0;
+				}
+
+				if( n > sizen )
+				{
+					if( n != 0 )
+						fprintf( stderr, "Read normal %d, but only have %d so far\n", n, sizen );
+					n = 0;
+				}
+
+				if( v > sizev )
+				{
+					if( v != 0 )
+						fprintf( stderr, "Read vertex coord %d, but only have %d so far\n", v, sizev );
+					v = 0;
+					valid = false;
+				}
+
+				vertices[vtx].v = v;
+				vertices[vtx].n = n;
+				vertices[vtx].t = t;
+				vtx++;
+
+				if( vtx >= 10 )
+					break;
+
+				numVertices++;
+			}
+
+
+			// if vertices are invalid, don't draw anything this time:
+
+			if( ! valid )
+				continue;
+
+			if( numVertices < 3 )
+				continue;
+
+
+			// list the vertices:
+
+			int numTriangles = numVertices - 2;
+
+			for( int it = 0; it < numTriangles; it++ )
+			{
+				int vv[3];
+				vv[0] = 0;
+				vv[1] = it + 1;
+				vv[2] = it + 2;
+
+				// get the planar normal, in case vertex normals are not defined:
+
+				struct Vertex *v0 = &Vertices[ vertices[ vv[0] ].v - 1 ];
+				struct Vertex *v1 = &Vertices[ vertices[ vv[1] ].v - 1 ];
+				struct Vertex *v2 = &Vertices[ vertices[ vv[2] ].v - 1 ];
+
+				float v01[3], v02[3], norm[3];
+				v01[0] = v1->x - v0->x;
+				v01[1] = v1->y - v0->y;
+				v01[2] = v1->z - v0->z;
+				v02[0] = v2->x - v0->x;
+				v02[1] = v2->y - v0->y;
+				v02[2] = v2->z - v0->z;
+				Cross( v01, v02, norm );
+				Unit( norm, norm );
+				glNormal3fv( norm );
+
+				for( int vtx = 0; vtx < 3 ; vtx++ )
+				{
+					if( vertices[ vv[vtx] ].t != 0 )
+					{
+						struct TextureCoord *tp = &TextureCoords[ vertices[ vv[vtx] ].t - 1 ];
+						glTexCoord2f( tp->s, tp->t );
+					}
+
+					if( vertices[ vv[vtx] ].n != 0 )
+					{
+						struct Normal *np = &Normals[ vertices[ vv[vtx] ].n - 1 ];
+						glNormal3f( np->nx, np->ny, np->nz );
+					}
+
+					struct Vertex *vp = &Vertices[ vertices[ vv[vtx] ].v - 1 ];
+					glVertex3f( vp->x, vp->y, vp->z );
+				}
+			}
+			continue;
+		}
+
+
+		if( strcmp( cmd, "s" )  ==  0 )
+		{
+			continue;
+		}
+
+	}
+
+	glEnd();
+	fclose( fp );
+
+	fprintf( stderr, "Obj file range: [%8.3f,%8.3f,%8.3f] -> [%8.3f,%8.3f,%8.3f]\n",
+		xmin, ymin, zmin,  xmax, ymax, zmax );
+	fprintf( stderr, "Obj file center = (%8.3f,%8.3f,%8.3f)\n",
+		(xmin+xmax)/2., (ymin+ymax)/2., (zmin+zmax)/2. );
+	fprintf( stderr, "Obj file  span = (%8.3f,%8.3f,%8.3f)\n",
+		xmax-xmin, ymax-ymin, zmax-zmin );
+
+	return 0;
+}
+
+char *
+ReadRestOfLine( FILE *fp )
+{
+	static char *line;
+	std::vector<char> tmp(1000);
+	tmp.clear();
+
+	for( ; ; )
+	{
+		int c = getc( fp );
+
+		if( c == EOF  &&  tmp.size() == 0 )
+		{
+			return NULL;
+		}
+
+		if( c == EOF  ||  c == '\n' )
+		{
+			delete [] line;
+			line = new char [ tmp.size()+1 ];
+			for( int i = 0; i < (int)tmp.size(); i++ )
+			{
+				line[i] = tmp[i];
+			}
+			line[ tmp.size() ] = '\0';	// terminating null
+			return line;
+		}
+		else
+		{
+			tmp.push_back( c );
+		}
+	}
+
+	return "";
+}
+
+
+
+void
+ReadObjVTN( char *str, int *v, int *t, int *n )
+{
+	// can be one of v, v//n, v/t, v/t/n:
+
+	if( strstr( str, "//") )				// v//n
+	{
+		*t = 0;
+		sscanf( str, "%d//%d", v, n );
+		return;
+	}
+	else if( sscanf( str, "%d/%d/%d", v, t, n ) == 3 )	// v/t/n
+	{
+		return;
+	}
+	else
+	{
+		*n = 0;
+		if( sscanf( str, "%d/%d", v, t ) == 2 )		// v/t
+		{
+			return;
+		}
+		else						// v
+		{
+			*n = *t = 0;
+			sscanf( str, "%d", v );
+		}
+	}
+}
