@@ -49,8 +49,8 @@ int fall;
 float r = 0.0;
 float g = 1.0;
 float b = 0.0;
-float ground_points[21][21][3];
-float ground_colors[21][21][4];
+float ground_points[100][100][3];
+float ground_colors[100][100][4];
 float accum = -10.0;
 
 typedef struct {
@@ -87,7 +87,7 @@ const int ESCAPE = 0x1b;
 
 // initial window size:
 
-const int INIT_WINDOW_SIZE = 600;
+const int INIT_WINDOW_SIZE = 900;
 
 // size of the 3d box to be drawn:
 
@@ -218,6 +218,7 @@ const GLfloat FOGEND      = 4.f;
 int		ActiveButton;			// current button that is down
 GLuint	AxesList;				// list to hold the axes
 GLuint  DogList;				// list to hold the dog
+GLuint  TreeList;				// list to hold the tree
 int		AxesOn;					// != 0 means to draw the axes
 int		DebugOn;				// != 0 means to print debugging info
 int		DepthCueOn;				// != 0 means to use intensity depth cueing
@@ -235,7 +236,7 @@ float   Time;				   // time in seconds
 
 // Project specific variables
 bool    Freeze;                 // freeze animation
-
+bool    LightOn;
 // Function prototypes:
 void	Animate( );
 void	Display( );
@@ -296,9 +297,9 @@ void initParticles(int i) {
 		par_sys[i].life = 1.0;
 		par_sys[i].fade = float(rand()%100)/1000.0f+0.003f;
 		
-		par_sys[i].xpos = (float) (rand() % 21) - 10;
+		par_sys[i].xpos = (float) (rand() % 100) - 10;
 		par_sys[i].ypos = 10.0;
-		par_sys[i].zpos = (float) (rand() % 21) - 10;
+		par_sys[i].zpos = (float) (rand() % 100) - 10;
 		
 		par_sys[i].red = 0.5;
 		par_sys[i].green = 0.5;
@@ -319,8 +320,8 @@ void init( ) {
 
 	// Ground Verticies
     // Ground Colors
-    for (z = 0; z < 21; z++) {
-    	for (x = 0; x < 21; x++) {
+    for (z = 0; z < 100; z++) {
+    	for (x = 0; x < 100; x++) {
     		ground_points[x][z][0] = x - 10.0;
     		ground_points[x][z][1] = accum;
     		ground_points[x][z][2] = z - 10.0;
@@ -385,17 +386,18 @@ void drawSnow() {
 void drawScene( ) {
 	int i, j;
 	glPushMatrix();
+		
 		glRotatef(pan, 0.0, 1.0, 0.0);
 		glRotatef(tilt, 1.0, 0.0, 0.0);
 		// GROUND
 		// move to the center of the scene
 		glTranslatef(0.0, -10.0, 0.0);
-		glColor3f(r, g, b);
+		glColor3f(0.0, 0.9, 0.1);
 		glBegin(GL_QUADS);
 			// along z - y const
-			for (i = -10; i+1 < 11; i++) {
+			for (i = -10; i+1 < 89; i++) {
 				// along x - y const
-				for (j = -10; j+1 < 11; j++) {
+				for (j = -10; j+1 < 89; j++) {
 					glColor3fv(ground_colors[i+10][j+10]);
 					glVertex3f(ground_points[j+10][i+10][0], 
 								ground_points[j+10][i+10][1]  + zoom, 
@@ -417,9 +419,10 @@ void drawScene( ) {
 			}
 		glEnd();
 		// Which Particles
-		drawSnow();
-
+	
+	drawSnow();
 	glPopMatrix();
+	
 }
 						 
 // Main program:
@@ -494,11 +497,7 @@ void PointLight( int ilight, float x, float y, float z, float r, float g, float 
 	glLightf ( ilight, GL_QUADRATIC_ATTENUATION, 0. ); 
 }
 
-
-
-
 // Draw the snowman using DrawSnowman()
-
 void DrawSnowman(int gender){
 	// Draw a snow man using glutSolidSphere( ): 
 	// Draw the body of the snowman using glutSolidSphere( ):
@@ -709,6 +708,10 @@ void DrawSnowman(int gender){
 }
 // Draw the complete scene:
 
+// Simple Harmonic Oscillator equation
+float SimpleHarmonicOscillator( float t, float A ){
+	return ( float ) ( A * sin( ( 2*PI*t )) );
+}
 void Display( ){
 	// set which window we want to do the graphics into:
 	glutSetWindow( MainWindow );
@@ -773,71 +776,35 @@ void Display( ){
 		glDisable( GL_FOG );
 	}
 
-
-	// possibly draw the axes:
-
 	if( AxesOn != 0 )
 	{
 		glColor3fv( &Colors[WhichColor][0] );
 		glCallList( AxesList );
 	}
 
-
-	// since we are using glScalef( ), be sure the normals get unitized:
-
+	
+	const float x = 50.0;
+	const float y = 50.0;
+	const float z = 50.0;
+	
 	glEnable( GL_NORMALIZE );
+	glShadeModel( GL_SMOOTH );
 
+	( LightOn) ? glEnable(GL_LIGHT0): glDisable(GL_LIGHT0);
 	
-
-		
-	// Animate particles falling from the sky:
-
-	// Draw the particles falling from the sky using glutSolidSphere( ):
-
-	// use a white color for the particles
-
-	
-	glEnable(GL_LIGHTING);
 	glPushMatrix();
-		glTranslatef(0.0, 2.0, 0.0);
-		// glutSolidSphere(0.1, 20, 20);
-		// point light with yellow color
-		GLfloat yellow[] = { 1.0, 1.0, 0.0, 1.0 };
-		GLfloat white[] = { 1.0, 1.0, 1.0, 1.0 };
-		GLfloat black[] = { 0.0, 0.0, 0.0, 1.0 };
-
-		// position of the light
-		GLfloat lightPos[] = { 0.0, 2.0, 0.0, 1.0 };
-
-		// set the light properties
-		glLightfv(GL_LIGHT0, GL_AMBIENT, black);
-		glLightfv(GL_LIGHT0, GL_DIFFUSE, yellow);
-		glLightfv(GL_LIGHT0, GL_SPECULAR, white);
-		glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
-
-		// enable the light
-		glEnable(GL_LIGHT0);
-
-		// enable the depth test
-		glEnable(GL_DEPTH_TEST);
-
-		// enable the lighting
-		glEnable(GL_LIGHTING);
-
-		// enable the color material mode
-		glEnable(GL_COLOR_MATERIAL);
-
-		// set the material properties which will be assigned by glColor
-		glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-
+		glTranslatef(x, y, z);
+		glColor3f( 1.f, 1.f, 0.f );
+		PointLight(GL_LIGHT0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0);
+		glutSolidSphere(10, 20, 20);
 	glPopMatrix();
-	glDisable(GL_LIGHTING);
+	
 	// Draw a dog 
 	glPushMatrix();
 		// make a non-uniform color between brown and black
 		glColor3f(0.5, 0.25, 0.0);
 		glTranslatef(0.f, 0.f, 0.f);
-		glRotatef(360*Time, 0.f, 1.f, 0.f);
+		
 		glScalef(0.5f, 0.5f, 0.5f);
 		glCallList(DogList);
 	glPopMatrix();
@@ -847,16 +814,19 @@ void Display( ){
 	drawScene();
 	// Draw the snowman:
 	glPushMatrix();
-		glTranslatef(3*cos(2*PI*Time), 0.f, 4*sin(2*PI*Time));
+		glTranslatef(SimpleHarmonicOscillator(Time, 3), 0.f, SimpleHarmonicOscillator(Time, 3));
 		glRotatef(360*Time, 0.f, 1.f, 0.f);
 		DrawSnowman(1);
-	
 	glPopMatrix();
 	glPushMatrix();
-		glTranslatef(-3*cos(2*PI*Time), 0.f, 4*sin(2*PI*Time));
+		glTranslatef(3*SimpleHarmonicOscillator(Time, 5), 0.f, SimpleHarmonicOscillator(Time, 5));
 		glRotatef(-360*Time, 0.f, 1.f, 0.f);
 		DrawSnowman(0);
 	glPopMatrix();
+	glCallList(TreeList);
+
+	
+	
 
 	
 
@@ -1229,6 +1199,28 @@ void InitLists( ){
 	glEndList( );
 
 
+	// create a tree with the tree list
+	TreeList = glGenLists( 1 );
+	glNewList( TreeList, GL_COMPILE );
+		
+	// Draw trees:
+	const int NUM_TREES = 100;
+	for(int i = 0; i < NUM_TREES; i++){
+		float locationX = (rand() % 50) - 10;
+		float locationZ = (rand() % 50) - 10;
+		glPushMatrix();
+			glTranslatef(locationX, -1.5f, locationZ);
+			// dark green
+			glColor3f(0.0, 0.5, 0.0);
+			glRotatef(360, 0.f, 1.f, 0.f);
+			glScalef(0.5f, 0.5f, 0.5f);
+			// Make the tree with an obj file
+			LoadObjFile( "tree.obj" );
+		glPopMatrix();
+	}
+	glEndList( );
+
+
 	// create the axes:
 
 	AxesList = glGenLists( 1 );
@@ -1249,6 +1241,9 @@ Keyboard( unsigned char c, int x, int y )
 		fprintf( stderr, "Keyboard: '%c' (0x%0x)\n", c, c );
 
 	switch( c ){
+		case '0':
+			LightOn = !LightOn;
+			break;
 		case 'f':
 		case 'F':
 			Freeze = !Freeze;
