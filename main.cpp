@@ -1198,16 +1198,15 @@ void InitLists( ){
 		LoadObjFile( "dog.obj" );
 	glEndList( );
 
-
 	// create a tree with the tree list
 	TreeList = glGenLists( 1 );
 	glNewList( TreeList, GL_COMPILE );
 		
 	// Draw trees:
-	const int NUM_TREES = 20;
+	const int NUM_TREES = 50;
 	for(int i = 0; i < NUM_TREES; i++){
-		float locationX = (rand() % 50) - 10;
-		float locationZ = (rand() % 50) - 10;
+		float locationX = (rand() % 80) - 10;
+		float locationZ = (rand() % 80) - 10;
 		glPushMatrix();
 			glTranslatef(locationX, -1.5f, locationZ);
 			// dark green
