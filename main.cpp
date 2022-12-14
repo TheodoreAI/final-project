@@ -814,12 +814,12 @@ void Display( ){
 	drawScene();
 	// Draw the snowman:
 	glPushMatrix();
-		glTranslatef(SimpleHarmonicOscillator(Time, 1), 0.f, SimpleHarmonicOscillator(Time, 1));
+		glTranslatef(5*cos(Time*2*PI), 0.f, 5*sin(Time*2*PI));
 		glRotatef(360, 0.f, 1.f, 0.f);
 		DrawSnowman(1);
 	glPopMatrix();
 	glPushMatrix();
-		glTranslatef(3*SimpleHarmonicOscillator(Time, 1.5), 0.f, SimpleHarmonicOscillator(Time, 1.5));
+		glTranslatef(2, 0.f, 2);
 		glRotatef(-360, 0.f, 1.f, 0.f);
 		DrawSnowman(0);
 	glPopMatrix();
